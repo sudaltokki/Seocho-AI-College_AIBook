@@ -21,16 +21,17 @@ from multiprocessing import freeze_support
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
+import settings
 # AWS 계정 정보 및 S3 버킷 정보 설정
 aws_access_key_id = 'AKIAUKTRTP4V7HMI3BPK'
-aws_secret_access_key = '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'
+aws_secret_access_key = settings.AWS_SECRET_ACCESS_KEY
 bucket_name = 'seocho-voicetest'
 
 # S3 클라이언트 생성
 s3 = boto3.client('s3', aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
 
 # openai api key
-api_key = "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"
+api_key = settings.OPENAI_KEY
 openai.api_key = api_key
 
 # stt model
