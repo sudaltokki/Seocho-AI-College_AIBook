@@ -36,7 +36,7 @@ openai.api_key = api_key
 
 # stt model
 stt_processor = WhisperProcessor.from_pretrained("openai/whisper-small")
-stt_model = WhisperForConditionalGeneration.from_pretrained("seocho/model")
+stt_model = WhisperForConditionalGeneration.from_pretrained("whisper-model")
 
 # stable diffusion modelz
 # sd_model = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", revision="fp16", torch_dtype=torch.float16)
@@ -91,7 +91,7 @@ def stt(audio_file):
 # Prompt Engineering
 def load_template(type):
     # UnicodeDecodeError로 encoding='utf-8'추가
-    with open('seocho/prompt/prompt_template'+type+'.txt', 'r', encoding='utf-8') as f:
+    with open('prompt/prompt_template'+type+'.txt', 'r', encoding='utf-8') as f:
         return f.read()
     
 def make_gpt_format(query: str = None):
@@ -101,8 +101,11 @@ def make_gpt_format(query: str = None):
     ]
     return message
 
+
 def gpt3(
-        query: str = None,
+        main_char: str = None,
+        subject: str = None,
+        story: str = None,
         model_name: str = "gpt-4",
         max_len: int = 3500,
         temp: float = 1.0,
@@ -112,11 +115,11 @@ def gpt3(
         top_p: float = 1.0,
         type: str = '1',
     ):
-    if not query:
+    if not story and not (main_char and subject):
         raise ValueError("There is no query sentence!")
     prompt_template = load_template(type)
     
-    prompt = prompt_template.format(transcribed_text=query)
+    prompt = prompt_template.format(main_char=main_char, subject=subject, story=story)
     
     messages = make_gpt_format(prompt)
     # print(messages)
@@ -151,14 +154,14 @@ def gpt3(
 
 # Stable Diffusion
 def text_to_image(text):
-    print('start')
+
     #prompt = "a photograph of an astronaut riding a horse"
     image = sd_model(text).images[0]  # image here is in [PIL format](https://pillow.readthedocs.io/en/stable/)
-    print('done')
+
     #이미지 저장
     current_time = datetime.datetime.now()
     formatted_time = current_time.strftime('%Y%m%d%H%M%S')
-    image_file_path = 'seocho/image/image'+formatted_time+'.jpg'
+    image_file_path = 'image/image'+formatted_time+'.jpg'
     image.save(image_file_path)
     
     try:
@@ -172,96 +175,119 @@ def text_to_image(text):
     #이미지 출력
     return url
 
-
-    
-def main(s3_audio_url):
-    
-    
-    current_time = datetime.datetime.now()
-    formatted_time = current_time.strftime('%Y%m%d%H%M%S')
-    
-    print(formatted_time)
-    '''
-    # WebM 파일을 저장할 경로
-    webm_file_path = 'seocho/audio/audio'+formatted_time+'.webm'
-
-    # S3 URL에서 오디오 파일 다운로드
-    get_webm(s3_audio_url, webm_file_path)   
-
-    # wav 파일을 저장할 경로
-    wav_file_path = 'audio'+formatted_time+'.wav'
-    
-    # webm 파일을 wav 파일로 변환
-    webm_to_wav(webm_file_path, wav_file_path)
-    '''
-    # 임시로 audio 값 고정
-    wav_file_path = "seocho/audio/audio20230930161634.wav"
-
-    # speech to text
-    text = stt(wav_file_path)
-    text = '상어'
-    
-    # 페이지 수 설정
-    num = 5
-    
-    # 동화책 내용 생성
-    story = gpt3(query=text, type='4')
-    
-    page_sentences = []
+def get_sentence(sentences):
+    sentence_list = []
 
     # 페이지별로 문장 추출
-    pages = story.split('\n')
+    pages = sentences.split('\n')
     for page in pages:
         if page.strip():  # 빈 줄은 무시
             # 페이지에서 문장만 추출
             sentence = page.split(': ')[1]
-            page_sentences.append(sentence)
+            sentence_list.append(sentence)
     
-    #print(page_sentences) 
+    return sentence_list
 
 
-
-    title = gpt3(query=story, type='3')
-    
+def get_title(title):
     # 정규 표현식 패턴
     pattern = r'제목:\s+"([^"]+)"'
 
     # 정규 표현식을 사용하여 제목 추출
-    match = re.search(pattern, title)
-
+    match = re.search(pattern, title)  
+    
     if match:
         title = match.group(1)
         print(f"제목: {title}")
     else:
         print("제목을 찾을 수 없습니다.")
+        
+    return title
 
-    prompt_result = gpt3(query=story, type='5')
-    prompt_list = []
+
+def speech_to_text(s3_audio_url):
     
-    prompts = prompt_result.split('\n')
-    for prompt in prompts:
-        if prompt.strip():  # 빈 줄은 무시
-            # 페이지에서 문장만 추출
-            text = prompt.split(': ')[1]
-            prompt_list.append(text)
-            
-    print(prompt_list)
+    current_time = datetime.datetime.now()
+    formatted_time = current_time.strftime('%Y%m%d%H%M%S')
     
+    # # WebM 파일을 저장할 경로
+    # webm_file_path = 'audio/audio'+formatted_time+'.webm'
+
+    # # S3 URL에서 오디오 파일 다운로드
+    # get_webm(s3_audio_url, webm_file_path)   
+
+    # # wav 파일을 저장할 경로
+    # wav_file_path = 'audio/audio'+formatted_time+'.wav'
+    
+    # # webm 파일을 wav 파일로 변환
+    # webm_to_wav(webm_file_path, wav_file_path)
+    wav_file_path = 'audio/test_audio.wav'
+    
+    # speech to text
+    return stt(wav_file_path)   
+ 
+def generate_book(main_char, subject):
+    
+    # 페이지 수 설정
+    num = 5
+    
+    # 동화책 내용 생성
+    story = gpt3(main_char=main_char, subject=subject, type='4')
+    
+    # 결과에서 문장 추출
+    page_list = get_sentence(story) 
+    
+    # 동화책 제목 생성
+    title = gpt3(story=story, type='3')
+    
+    # 결과에서 제목 추출
+    title = get_title(title)
+    
+    # 이미지 생성용 프롬프트 생성
+    prompt_result = gpt3(story=story, type='5')
+    
+    # 결과에서 프롬프트 추출
+    prompt_list = get_sentence(prompt_result)
+    
+    # 랜덤으로 주고 싶은 prompt 값
     color = ['painted in bright water colors']
-    
     medium = ['colored pencil', 'oil pastel', 'acrylic painting', 'a color pencil sketch inspired by Edwin Landseer', 'large pastel, a color pencil sketch inspired by Edwin Landseer', 'a storybook illustration by Marten Post', 'naive art', 'cute storybook illustration', 'a storybook illustration by tim burton']
-    
     setting = ","+ medium[0] +", (Lighting) in warm sunlight, (Artist) in a cute and adorable style, cute storybook illustration, (Medium) digital art, (Color Scheme) vibrant and cheerful, "
     
-    # text to image
-    result_img = []
+    # 동화책 그림 생성
+    img_list = []
     for i in range(num):
         print(prompt_list[i]+setting)
-        result_img.append(text_to_image(prompt_list[i]+setting))
-        
+        img_list.append(text_to_image(prompt_list[i]+setting))
+    
     # s3 image url 반환
-    return 0
+    response_data = {
+        'image_story_pairs': [],
+    }
+    
+    # 이미지와 문장 쌍을 response_data에 추가
+    for i in range(len(img_list)):
+        image_story_pair = {
+            'image': img_list[i],
+            'story': page_list[i]
+        }
+        response_data['image_story_pairs'].append(image_story_pair)
+    
+    return response_data
 
+
+main_char = ""
+subject = ""
+    
+def main(s3_audio_url):
+    global main_char, subject
+    main_char = "개구리 핀"
+    subject = speech_to_text(s3_audio_url)
+    
+    print(subject[0])
+    
+    generate_book(main_char, subject[0])
+    
 
 if __name__ == "__main__":
     main("https://seocho-voicetest.s3.ap-northeast-2.amazonaws.com/audio-1696055947410.webm")

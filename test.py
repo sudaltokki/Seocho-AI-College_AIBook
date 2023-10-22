@@ -32,8 +32,8 @@ api_key = settings.OPENAI_KEY
 openai.api_key = api_key
 
 # stt model
-stt_processor = WhisperProcessor.from_pretrained("openai/whisper-small")
-stt_model = WhisperForConditionalGeneration.from_pretrained("model")
+stt_processor = WhisperProcessor.from_pretrained("whisper-model")
+stt_model = WhisperForConditionalGeneration.from_pretrained("whisper-model")
 
 # stable diffusion model
 '''
@@ -48,6 +48,7 @@ import re
 
 
 # s3에서 webm 데이터 받아온 후 wav 파일로 변환
+# ffmpeg 설치 후 환경변수 설정 필요
 def get_webm(s3_audio_url, webm_path):
     try:
         response = requests.get(s3_audio_url)
@@ -102,8 +103,9 @@ def make_gpt_format(query: str = None):
     return message
 
 def gpt3(
-        query1: str = None,
-        query2: str = None,
+        main_char: str = None,
+        subject: str = None,
+        story: str = None,
         model_name: str = "gpt-4",
         max_len: int = 3500,
         temp: float = 1.0,
@@ -113,11 +115,11 @@ def gpt3(
         top_p: float = 1.0,
         type: str = '1',
     ):
-    if not query1 and not query2:
+    if not story and not (main_char and subject):
         raise ValueError("There is no query sentence!")
     prompt_template = load_template(type)
     
-    prompt = prompt_template.format(main_char=query1, subject=query2)
+    prompt = prompt_template.format(main_char=main_char, subject=subject, story=story)
     
     messages = make_gpt_format(prompt)
     # print(messages)
@@ -201,9 +203,6 @@ def get_title(title):
         print("제목을 찾을 수 없습니다.")
         
     return title
-
-main_char = ""
-subject = ""
    
 def speech_to_text(s3_audio_url):
     
@@ -227,22 +226,22 @@ def speech_to_text(s3_audio_url):
 def generate_book(main_char, subject):
     
     # 페이지 수 설정
-    num = 5
+    num = 8
     
     # 동화책 내용 생성
-    story = gpt3(query1=main_char, query2=subject, type='4')
+    story = gpt3(main_char=main_char, subject=subject, type='4')
     
     # 결과에서 문장 추출
     page_list = get_sentence(story) 
 
     # 동화책 제목 생성
-    title = gpt3(query=story, type='3')
+    title = gpt3(story=story, type='3')
     
     # 결과에서 제목 추출
     title = get_title(title)
     
     # 이미지 생성용 프롬프트 생성
-    prompt_result = gpt3(query=story, type='5')
+    prompt_result = gpt3(story=story, type='5')
     
     # 결과에서 프롬프트 추출
     prompt_list = get_sentence(prompt_result)
@@ -262,6 +261,7 @@ def generate_book(main_char, subject):
     # s3 image url 반환
     response_data = {
         'image_story_pairs': [],
+        'title': title,
     }
     
     # 이미지와 문장 쌍을 response_data에 추가
@@ -275,15 +275,17 @@ def generate_book(main_char, subject):
     return jsonify(response_data)
 
 
-
+main_char = ""
+subject = ""
 
 @app.route("/voice", methods=["GET"])
 def voice():
     global main_char, subject
     main_char = request.args.get("keyword")
     file_url = request.args.get("file_url")
+    print(main_char, file_url)
     subject = speech_to_text(file_url)
-    return subject
+    return subject[0]
 
 @app.route("/book", methods=["GET"])
 def book():

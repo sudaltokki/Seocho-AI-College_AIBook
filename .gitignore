@@ -1,6 +1,7 @@
 /audio
 /image
 /model
+/whisper-model
 /model.zip
 /multiprocessing_test.py
 settings.py
